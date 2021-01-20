@@ -550,3 +550,19 @@ public class UserDto {
    private String nickname;
 }
 ```
+
+## repository
+### repository/UserRepository
+`findOneWithAuthoritiesByUsername` : username 을 기준으로 User 정보를 가져올 때 권한 정보도 같이 가져오게 된다.
+```java
+public interface UserRepository extends JpaRepository<User, Long> {
+   @EntityGraph(attributePaths = "authorities")
+   Optional<User> findOneWithAuthoritiesByUsername(String username);
+}
+```
+
+### repository/AuthorityRepository
+```java
+public interface AuthorityRepository extends JpaRepository<Authority, String> {
+}
+```
