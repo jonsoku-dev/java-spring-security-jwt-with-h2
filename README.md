@@ -642,3 +642,139 @@ public class AuthController {
     }
 }
 ```
+
+# 4차 README
+* 회원가입 API 생성
+* 권한 검증 확인
+
+## 유틸리티 메소드
+### util/SecurityUtil
+`getCurrentUsername` : Security Context 의 Authentication 객체를 이용해 username 을 리턴해주는 간단한 유틸성 메소드
+
+Security Context 에 Authentication 객체가 저장되는 시점은 JwtFilter 의 doFilter 메소드에서 Request 가 들어올 때 SecurityContext 에 Authentication 객체를 저장해서 사용하게 된다.
+
+```java
+public class SecurityUtil {
+
+    private static final Logger logger = LoggerFactory.getLogger(SecurityUtil.class);
+
+    private SecurityUtil() {
+    }
+
+    public static Optional<String> getCurrentUsername() {
+        final Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) {
+            logger.debug("Security Context에 인증 정보가 없습니다.");
+            return Optional.empty();
+        }
+
+        String username = null;
+        if (authentication.getPrincipal() instanceof UserDetails) {
+            UserDetails springSecurityUser = (UserDetails) authentication.getPrincipal();
+            username = springSecurityUser.getUsername();
+        } else if (authentication.getPrincipal() instanceof String) {
+            username = (String) authentication.getPrincipal();
+        }
+
+        return Optional.ofNullable(username);
+    }
+}
+```
+
+## 회원가입을 위한 섭스
+### service/UserService
+UserService 는 UserRepository, PasswowrdEncoder 를 주입받는다.
+
+`signup` : 회원가입 로직을 수행하는 메서드, username 이 DB 에 존재하지 않으면 Authority 와 User 정보를 생성해서 UserRepository 의 save 메소드를 통해 DB 에 정보를 저장한다.
+
+첫번째 `getUserWithAuthorities` : username 을 기준으로 정보를 가져옴
+
+두번째 `getUserWithAuthorities` : SecurityContext 에 저장 된 username 을 기준으로 정보를 가져옴 
+
+```java
+@Service
+public class UserService {
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Transactional
+    public User signup(UserDto userDto) {
+        if (userRepository.findOneWithAuthoritiesByUsername(userDto.getUsername()).orElse(null) != null) {
+            throw new RuntimeException("이미 가입되어 있는 유저입니다.");
+        }
+
+        //빌더 패턴의 장점
+        Authority authority = Authority.builder()
+                                       .authorityName("ROLE_USER")
+                                       .build();
+
+        User user = User.builder()
+                        .username(userDto.getUsername())
+                        .password(passwordEncoder.encode(userDto.getPassword()))
+                        .nickname(userDto.getNickname())
+                        .authorities(Collections.singleton(authority))
+                        .activated(true)
+                        .build();
+
+        return userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> getUserWithAuthorities(String username) {
+        return userRepository.findOneWithAuthoritiesByUsername(username);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> getMyUserWithAuthorities() {
+        return SecurityUtil.getCurrentUsername().flatMap(userRepository::findOneWithAuthoritiesByUsername);
+    }
+}
+```
+
+## UserController
+### controller/UserContoller
+`getMyUserInfo` : @PreAuthorize 를 통해서 USER, ADMIN 두가지 권한 모두 허용
+
+`getUserInfo` : @PreAuthorize 를 통해서 ADMIN 권한만 허용
+
+```java
+@RestController
+@RequestMapping("/api")
+public class UserController {
+    private final UserService userService;
+
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping("/hello")
+    public ResponseEntity<String> hello() {
+        return ResponseEntity.ok("hello");
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<User> signup(
+            @Valid @RequestBody UserDto userDto
+    ) {
+        return ResponseEntity.ok(userService.signup(userDto));
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ResponseEntity<User> getMyUserInfo() {
+        return ResponseEntity.ok(userService.getMyUserWithAuthorities().get());
+    }
+
+    @GetMapping("/user/{username}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<User> getUserInfo(@PathVariable String username) {
+        return ResponseEntity.ok(userService.getUserWithAuthorities(username).get());
+    }
+}
+```
