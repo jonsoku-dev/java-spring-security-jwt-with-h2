@@ -566,3 +566,79 @@ public interface UserRepository extends JpaRepository<User, Long> {
 public interface AuthorityRepository extends JpaRepository<Authority, String> {
 }
 ```
+
+## service
+### service/CustomUserDetailsService
+CustomUserDetailsService 는 `UserDetailsService` 를 주입 받는다.
+`loadUserByUsername` 메소드를 오버라이드 해서 구현해야한다.
+token 검증 시 필수메소드 : 로그인시에 DB 에서 유저정보와 권한 정보를 가져오게 된다. 해당 정보를 기반으로 userDetails.User 객체를 생성해서 리턴한다.
+리턴되는 User 는 `org.springframework.security.core.userdetails.User` 의 User 이다. (spring security 객체) 
+```java
+@Component("userDetailsService")
+public class CustomUserDetailsService implements UserDetailsService {
+   private final UserRepository userRepository;
+
+   public CustomUserDetailsService(UserRepository userRepository) {
+      this.userRepository = userRepository;
+   }
+
+   @Override
+   @Transactional
+   public UserDetails loadUserByUsername(final String username) {
+      return userRepository.findOneWithAuthoritiesByUsername(username)
+         .map(user -> createUser(username, user))
+         .orElseThrow(() -> new UsernameNotFoundException(username + " -> 데이터베이스에서 찾을 수 없습니다."));
+   }
+
+   private org.springframework.security.core.userdetails.User createUser(String username, User user) {
+      if (!user.isActivated()) {
+         throw new RuntimeException(username + " -> 활성화되어 있지 않습니다.");
+      }
+      List<GrantedAuthority> grantedAuthorities = user.getAuthorities().stream()
+              .map(authority -> new SimpleGrantedAuthority(authority.getAuthorityName()))
+              .collect(Collectors.toList());
+      return new org.springframework.security.core.userdetails.User(user.getUsername(),
+              user.getPassword(),
+              grantedAuthorities);
+   }
+}
+```
+
+## Controller 
+### controller/AuthController
+1. AuthController 는 TokenProvider, AuthenticationManagerBuilder 를 주입 받는다. 로그인 API 경로는 `/api/authenticate` 이고 Post 요청을 받는다.
+2. LoginDto 의 username, password 를 파라미터로 받고 이를 이용해 UsernamePasswordAuthenticationToken 을 생성한다.
+3. authenticationToken 을 이용해서 Authentication 객체를 생성하려고 authenticate method 가 실행이 될 때 loadUserByUsername 메소드가 실행된다.
+4. Authentication 객체를 생성하고 이를 SecurityContext 에 저장하고 Authentication 객체를 createToken 메소드를 통해서 JWT Token 을 생성한다.
+5. JWT Token 을 Response Header 에도 넣어주고 TokenDto 를 이용해서 Response Body 에도 넣어서 리턴하게 된다.  
+
+```java
+@RestController
+@RequestMapping("/api")
+public class AuthController {
+    private final TokenProvider tokenProvider;
+    private final AuthenticationManagerBuilder authenticationManagerBuilder;
+
+    public AuthController(TokenProvider tokenProvider, AuthenticationManagerBuilder authenticationManagerBuilder) {
+        this.tokenProvider = tokenProvider;
+        this.authenticationManagerBuilder = authenticationManagerBuilder;
+    }
+
+    @PostMapping("/authenticate")
+    public ResponseEntity<TokenDto> authorize(@Valid @RequestBody LoginDto loginDto) {
+
+        UsernamePasswordAuthenticationToken authenticationToken =
+                new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword());
+
+        Authentication authentication = authenticationManagerBuilder.getObject().authenticate(authenticationToken);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        String jwt = tokenProvider.createToken(authentication);
+
+        HttpHeaders httpHeaders = new HttpHeaders();
+        httpHeaders.add(JwtFilter.AUTHORIZATION_HEADER, "Bearer " + jwt);
+
+        return new ResponseEntity<>(new TokenDto(jwt), httpHeaders, HttpStatus.OK);
+    }
+}
+```
