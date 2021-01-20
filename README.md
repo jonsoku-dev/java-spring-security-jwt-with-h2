@@ -331,4 +331,43 @@ public class JwtFilter extends GenericFilterBean {
 `doFilter` : JWT 토큰의 인증정보 (resulveToken 으로부터 받은 정보) 를 SecurityContext 에 저장하는 역할을 수행한다.
 
 
- 
+ ## jwt/JwtSecurityConfig
+ 이전 만든 `TokenProvider` 및 `JwtFilter`를 SecurityConfig 에 적용할 때 사용할 JwtSecurityConfig 클래스 추가
+ ```java
+public class JwtSecurityConfig extends SecurityConfigurerAdapter<DefaultSecurityFilterChain, HttpSecurity> {
+
+    private final TokenProvider tokenProvider;
+
+    public JwtSecurityConfig(TokenProvider tokenProvider) {
+        this.tokenProvider = tokenProvider;
+    }
+
+    @Override
+    public void configure(HttpSecurity http) {
+        JwtFilter customFilter = new JwtFilter(tokenProvider);
+        http.addFilterBefore(customFilter, UsernamePasswordAuthenticationFilter.class);
+    }
+}
+ ```
+
+## jwt/JwtAuthenticationEntryPoint
+유효한 자격증명을 제공하지 않고 접근하려 할때, 401 Unauthorized 에러를 리턴할 JwtAuthenticationEntryPoint 클래스를 만든다.
+```java
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    @Override
+    public void commence(HttpServletRequest request,
+                         HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+        // 유효한 자격증명을 제공하지 않고 접근하려 할때 401
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+    }
+}
+```
+
+## jwt/JwtAccessDeniedHandler
+필요한 권한이 존재하지 않는 경우에 403 Forbidden 에러를 리턴하기 위해서 JwtAccessDeniedHandler 클래스를 만든다.
+```java
+
+```
