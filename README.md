@@ -282,3 +282,53 @@ public class TokenProvider implements InitializingBean {
 
 `validateToken` : 토큰의 유효성 검증을 수행한다. 토큰을 받아 유효성에 따라 Boolean 을 리턴한다.
 
+## jwt/JwtFilter
+JWT 를 위한 커스텀 필터를 만들기 위해 JwtFilter 클래스를 생성한다.
+```java
+public class JwtFilter extends GenericFilterBean {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtFilter.class);
+
+    public static final String AUTHORIZATION_HEADER = "Authorization";
+
+    private final TokenProvider tokenProvider;
+
+    public JwtFilter(TokenProvider tokenProvider) {
+        this.tokenProvider = tokenProvider;
+    }
+
+    private String resolveToken(HttpServletRequest request) {
+        String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
+            throws IOException, ServletException {
+        HttpServletRequest httpServletRequest = (HttpServletRequest) servletRequest;
+        String jwt = resolveToken(httpServletRequest);
+        String requestURI = httpServletRequest.getRequestURI();
+
+        if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+            Authentication authentication = tokenProvider.getAuthentication(jwt);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            logger.debug("Security Context에 '{}' 인증 정보를 저장했습니다, uri: {}", authentication.getName(), requestURI);
+        } else {
+            logger.debug("유효한 JWT 토큰이 없습니다, uri: {}", requestURI);
+        }
+
+        filterChain.doFilter(servletRequest, servletResponse);
+    }
+}
+```
+`GenericFilterBean` 을 extends 해서 doFilter 를 Override 한다. 실제 필터링 로직은 doFilter 내부에 작성한다.
+
+`resolveToken` : Request Header 에서 토큰 정보를 꺼내오기 위한 resolveToken 메소드 추가.
+
+`doFilter` : JWT 토큰의 인증정보 (resulveToken 으로부터 받은 정보) 를 SecurityContext 에 저장하는 역할을 수행한다.
+
+
+ 
