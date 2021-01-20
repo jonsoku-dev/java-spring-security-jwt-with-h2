@@ -166,3 +166,28 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 }
 
 ```
+# 2차 README
+* JWT 설정 추가
+* JWT 관련 코드 개발
+* JWT 관련 Security Config 설정 추가
+
+## JWT 사용하기 위한 준비
+### build.gradle
+```groovy
+compile group: 'io.jsonwebtoken', name: 'jjwt-api', version: '0.11.2'
+runtime group: 'io.jsonwebtoken', name: 'jjwt-impl', version: '0.11.2'
+runtime group: 'io.jsonwebtoken', name: 'jjwt-jackson', version: '0.11.2'
+```
+### application.yml
+```yaml
+...
+
+jwt:
+  header: Authorization
+  #HS512 알고리즘을 사용할 것이기 때문에 512bit, 즉 64byte 이상의 secret key를 사용해야 한다.
+  #echo 'silvernine-tech-spring-boot-jwt-tutorial-secret-silvernine-tech-spring-boot-jwt-tutorial-secret'|base64
+  secret: c2lsdmVybmluZS10ZWNoLXNwcmluZy1ib290LWp3dC10dXRvcmlhbC1zZWNyZXQtc2lsdmVybmluZS10ZWNoLXNwcmluZy1ib290LWp3dC10dXRvcmlhbC1zZWNyZXQK
+  token-validity-in-seconds: 86400
+
+...
+```
