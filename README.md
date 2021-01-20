@@ -371,3 +371,122 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 ```java
 
 ```
+
+## SecurityConfig 수정
+### CorsConfig 추가
+```java
+@Configuration
+public class CorsConfig {
+
+   @Bean
+   public CorsFilter corsFilter() {
+      UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+      CorsConfiguration config = new CorsConfiguration();
+      config.setAllowCredentials(true);
+      config.addAllowedOrigin("*");
+      config.addAllowedHeader("*");
+      config.addAllowedMethod("*");
+
+      source.registerCorsConfiguration("/api/**", config);
+      return new CorsFilter(source);
+   }
+
+}
+```
+
+SecurityConfig 에 Jwt 관련 로직 추가
+```java
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    private final TokenProvider tokenProvider;
+    private final CorsFilter corsFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+
+    public SecurityConfig(
+            TokenProvider tokenProvider,
+            CorsFilter corsFilter,
+            JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
+            JwtAccessDeniedHandler jwtAccessDeniedHandler
+    ) {
+        this.tokenProvider = tokenProvider;
+        this.corsFilter = corsFilter;
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Override
+    public void configure(WebSecurity web) {
+        web.ignoring()
+           .antMatchers(
+                   "/h2-console/**"
+                   ,"/favicon.ico"
+                   ,"/error"
+           );
+    }
+
+    @Override
+    protected void configure(HttpSecurity httpSecurity) throws Exception {
+        httpSecurity
+                // token을 사용하는 방식이기 때문에 csrf를 disable합니다.
+                .csrf().disable()
+
+                .addFilterBefore(corsFilter, UsernamePasswordAuthenticationFilter.class)
+
+                .exceptionHandling()
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                .accessDeniedHandler(jwtAccessDeniedHandler)
+
+                // enable h2-console
+                .and()
+                .headers()
+                .frameOptions()
+                .sameOrigin()
+
+                // 세션을 사용하지 않기 때문에 STATELESS로 설정
+                .and()
+                .sessionManagement()
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+
+                .and()
+                .authorizeRequests()
+                .antMatchers("/api/hello").permitAll()
+                .antMatchers("/api/authenticate").permitAll()
+                .antMatchers("/api/signup").permitAll()
+
+                .anyRequest().authenticated()
+
+                .and()
+                .apply(new JwtSecurityConfig(tokenProvider));
+    }
+}
+```
+`@EnableGlobalMethodSecurity` : @PreAuthorize 어노테이션을 메소드 단위로 추가하기 위해서 적용
+
+`SecurityConfig` 는 TokenProvider, JwtAuthenticationEntryPoint, JwtAccessDeniedHandler 주입
+ 
+`PasswordEncoder` : BCryptPasswordEncoder 를 사용한다.
+
+`httpSecurity.csrf().disable()` : 토큰을 사용하기 때문에 csrf 설정은 disable 한다.
+
+`.authenticationEntryPoint(jwtAuthenticationEntryPoint)` : Exception 을 핸들링하는 곳. 만들었던 파일을 집어 넣는다.
+
+`.accessDeniedHandler(jwtAccessDeniedHandler)` : Exception 을 핸들링하는 곳. 만들었던 파일을 집어 넣는다.
+
+`.sessionCreationPolicy(SessionCreationPolicy.STATELESS)` : 세션을 사용하지 않기 때문에 STATELESS 설정
+
+`.antMatchers("/api/hello").permitAll()` : 해당 API 는 토큰이 없는 상태에서 들어오기 때문에 permitAll
+
+`.antMatchers("/api/authenticate").permitAll()` : 해당 API 는 토큰이 없는 상태에서 들어오기 때문에 permitAll
+
+`.antMatchers("/api/signup").permitAll()` : 해당 API 는 토큰이 없는 상태에서 들어오기 때문에 permitAll
+
+`.apply(new JwtSecurityConfig(tokenProvider))` : JwtFilter 를 addFilter 로 등록했던, JwtSecurityConfig 클래스도 적용.
+    
+                
