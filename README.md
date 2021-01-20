@@ -490,3 +490,63 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 `.apply(new JwtSecurityConfig(tokenProvider))` : JwtFilter 를 addFilter 로 등록했던, JwtSecurityConfig 클래스도 적용.
     
                 
+# 3차 README
+* 외부와의 통신에 사용할 DTO 클래스 생성
+* Repository 관련 코드 생성
+* 로그인 API, 관련 로직 생성
+
+## dto
+외부와의 통신에 사용할 DTO 클래스 생성
+### dto/LoginDto
+```java
+@Getter
+@Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class LoginDto {
+
+   @NotNull
+   @Size(min = 3, max = 50)
+   private String username;
+
+   @NotNull
+   @Size(min = 3, max = 100)
+   private String password;
+}
+```
+### dto/TokenDto
+```java
+@Getter
+@Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class TokenDto {
+
+    private String token;
+}
+```
+### dto/UserDto
+```java
+@Getter
+@Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class UserDto {
+
+   @NotNull
+   @Size(min = 3, max = 50)
+   private String username;
+
+   @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+   @NotNull
+   @Size(min = 3, max = 100)
+   private String password;
+
+   @NotNull
+   @Size(min = 3, max = 50)
+   private String nickname;
+}
+```
